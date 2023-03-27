@@ -95,7 +95,7 @@ int main()
     models.push_back(model);
     model = new BaseModel();
     Phys::Collider* collider = new Phys::Collider();
-    collider->Velocity.z = 0.2;
+    collider->Velocity.z = 0.9;
     collider->Init(models[0]->vertices, models[0]->indices);
     collider->AssignId(0);
     colliders.push_back(collider);
@@ -210,7 +210,7 @@ int main()
         }
         if (key == KEY_Q)
         {
-            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.0f, 0.5f);
+            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.0f, -0.5f);
         }
 
 

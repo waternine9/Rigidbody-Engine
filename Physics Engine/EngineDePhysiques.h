@@ -377,11 +377,18 @@ namespace Phys
         Collider* other;
         PhysVector3 toOther;
     };
+    struct SubModel
+    {
+        std::string name;
+        std::vector<int> indices;
+        std::vector<PhysVector3> ownVerts;
+    };
 	class Collider
 	{
 	protected:
         std::vector<PhysVector3> _NextVertices;
         std::vector<Weld> _Welds = std::vector<Weld>();
+        std::vector<SubModel> *_SubModels;
         int _Id = 0;
 
         bool _CollideWithOthers(std::vector<Collider*>& other, PhysVector3 rayOrigin, CollisionInfo &out)
@@ -583,18 +590,18 @@ namespace Phys
 
                     double drag = 0.0;
                     double tmpDrag = (-dot(normal, np0 - p0) > 0 ? 1 : 0) * magnitude(np0 - p0);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np0))), 0.04 / Mass * tmpDrag * surfaceArea * InvSub);
+                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np0))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
                     drag += tmpDrag / 3.0;
                     tmpDrag = (-dot(normal, np1 - p1) > 0 ? 1 : 0) * magnitude(np1 - p1);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np1))), 0.04 / Mass * tmpDrag * surfaceArea * InvSub);
+                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np1))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
                     drag += tmpDrag / 3.0;
                     tmpDrag = (-dot(normal, np2 - p2) > 0 ? 1 : 0) * magnitude(np2 - p2);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np2))), 0.04 / Mass * tmpDrag * surfaceArea * InvSub);
+                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np2))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
                     drag += tmpDrag / 3.0;
 
                     drag *= surfaceArea;
 
-                    drag /= 80;
+                    drag /= 200;
                     Velocity = Velocity + scale(normal, drag);
                 }
             }
@@ -635,8 +642,8 @@ namespace Phys
         {
             if (collisions > 0)
             {
-                Velocity = scale(Velocity + scale(VelocityUpdate, 1.0 / collisions), 1.0 - (0.01));
-                AngularVelocity = scale(AngularVelocity + scale(AngularUpdate, 1.0 / collisions), 1.0 - (0.05));
+                Velocity = scale(Velocity + scale(VelocityUpdate, 1.0 / collisions), 1.0 - (0.001));
+                AngularVelocity = AngularVelocity + scale(AngularUpdate, 1.0 / collisions);
 
                 if (!Parent.other)
                 {
@@ -683,6 +690,30 @@ namespace Phys
                     *v = (Position + otherRotMat * (*v - Position)) - toOther;
                 }
             }
+        }
+        bool RotateSubmodel(std::string name, PhysVector3 axis)
+        {
+            for (SubModel &model : *_SubModels)
+            {
+                if (model.name == name)
+                {
+                    Matrix4x4 rotMat = rotate(axis);
+
+                    for (PhysVector3 &v : model.ownVerts)
+                    {
+                        v = rotMat * v;
+                    }
+                    for (int i = 0;i < model.indices.size();i += 3)
+                    {
+                        
+                        *_Vertices[model.indices[i]] = Position + Rotation * model.ownVerts[i];
+                        *_Vertices[model.indices[i] + 1] = Position + Rotation * model.ownVerts[i + 1];
+                        *_Vertices[model.indices[i] + 2] = Position + Rotation * model.ownVerts[i + 2]; 
+                    }
+                    return true;
+                }
+            }
+            return false;
         }
 	};
 }

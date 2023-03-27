@@ -583,18 +583,18 @@ namespace Phys
 
                     double drag = 0.0;
                     double tmpDrag = (-dot(normal, np0 - p0) > 0 ? 1 : 0) * magnitude(np0 - p0);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np0))), 0.004 / Mass * tmpDrag * surfaceArea);
+                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np0))), 0.04 / Mass * tmpDrag * surfaceArea * InvSub);
                     drag += tmpDrag / 3.0;
                     tmpDrag = (-dot(normal, np1 - p1) > 0 ? 1 : 0) * magnitude(np1 - p1);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np1))), 0.004 / Mass * tmpDrag * surfaceArea);
+                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np1))), 0.04 / Mass * tmpDrag * surfaceArea * InvSub);
                     drag += tmpDrag / 3.0;
                     tmpDrag = (-dot(normal, np2 - p2) > 0 ? 1 : 0) * magnitude(np2 - p2);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np2))), 0.004 / Mass * tmpDrag * surfaceArea);
+                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np2))), 0.04 / Mass * tmpDrag * surfaceArea * InvSub);
                     drag += tmpDrag / 3.0;
 
                     drag *= surfaceArea;
 
-                    drag /= 800;
+                    drag /= 80;
                     Velocity = Velocity + scale(normal, drag);
                 }
             }

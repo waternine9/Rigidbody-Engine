@@ -7,8 +7,6 @@
 #include <fstream>
 #include <strstream>
 #include <omp.h>
-#include <Windows.h>
-
 class BaseModel
 {
 public:
@@ -97,46 +95,10 @@ int main()
     models.push_back(model);
     model = new BaseModel();
     Phys::Collider* collider = new Phys::Collider();
-    collider->Velocity.z = 0.9;
+    collider->Velocity.z = 0.2;
     collider->Init(models[0]->vertices, models[0]->indices);
     collider->AssignId(0);
     colliders.push_back(collider);
-
-    model = new BaseModel();
-    model->Load("wheel.obj", { -1.0, -3.7, -1.0 });
-    models.push_back(model);
-    collider = new Phys::Collider();
-    collider->Init(models[1]->vertices, models[1]->indices);
-    collider->AssignId(1);
-    colliders.push_back(collider);
-    //colliders[1]->WeldTo(colliders[0]);
-
-    model = new BaseModel();
-    model->Load("wheel.obj", { 1.0, -3.7, -1.0 });
-    models.push_back(model);
-    collider = new Phys::Collider();
-    collider->Init(models[2]->vertices, models[2]->indices);
-    collider->AssignId(2);
-    colliders.push_back(collider);
-    //colliders[2]->WeldTo(colliders[0]);
-
-    model = new BaseModel();
-    model->Load("wheel.obj", { -1.0, -3.7, 1.0 });
-    models.push_back(model);
-    collider = new Phys::Collider();
-    collider->Init(models[3]->vertices, models[3]->indices);
-    collider->AssignId(3);
-    colliders.push_back(collider);
-    //colliders[3]->WeldTo(colliders[0]);
-
-    model = new BaseModel();
-    model->Load("wheel.obj", { 1.0, -3.7, 1.0 });
-    models.push_back(model);
-    collider = new Phys::Collider();
-    collider->Init(models[4]->vertices, models[4]->indices);
-    collider->AssignId(4);
-    colliders.push_back(collider);
-    //colliders[4]->WeldTo(colliders[0]);
 
     model = new BaseModel();
     model->Load("map.obj", { 0.0, 0.0, 0.0 });
@@ -145,7 +107,6 @@ int main()
     collider->Static = true;
     collider->Init(model->vertices, model->indices);
     collider->GenerateOctree();
-
     colliders.push_back(collider);
 
     model = new BaseModel();
@@ -155,17 +116,6 @@ int main()
     collider->Static = true;
     collider->Init(model->vertices, model->indices);
     collider->GenerateOctree();
-
-    colliders.push_back(collider);
-
-    model = new BaseModel();
-    model->Load("map3.obj", { 0.0, 0.0, 0.0 });
-    models.push_back(model);
-    collider = new Phys::Collider();
-    collider->Static = true;
-    collider->Init(model->vertices, model->indices);
-    collider->GenerateOctree();
-
     colliders.push_back(collider);
 
     int key = 0;
@@ -178,7 +128,7 @@ int main()
         double mouseX = GetMouseX() / 100.0 - 5.0;
         double mouseY = (GetMouseY() / 30.0 - 5.0) - 2.0;
 
-        const int SUBSTEPS = 4;
+        const int SUBSTEPS = 16;
         float start = clock();
         for (int n = 0; n < SUBSTEPS; n++)
         {
@@ -213,10 +163,10 @@ int main()
             }
         }
 
-        PhysVector3 v = colliders[0]->Position - scale(colliders[0]->Forward, 20);
-        //camera.position = { (float)v.x, (float)v.y - 2.0f, (float)v.z };
+        PhysVector3 v = colliders[0]->Position;
+        camera.position = { (float)v.x + 10.0f, (float)v.y, (float)v.z };
         v = colliders[0]->Position;
-        //camera.target = { (float)v.x, (float)v.y, (float)v.z };
+        camera.target = { (float)v.x, (float)v.y, (float)v.z };
 
         int newKey = GetKeyPressed();
         key = newKey;
@@ -234,39 +184,33 @@ int main()
             key = 0;
         }
 
-        if (GetKeyState('A') & 0x8000)
+        if (key == KEY_A)
         {
             colliders[0]->AngularVelocity.y = 0.2; // colliders[1]->AngularVelocity + scale(colliders[0]->Forward, 2);
         }
 
-        if (GetKeyState('D') & 0x8000)
+        if (key == KEY_D)
         {
             colliders[0]->AngularVelocity.y = -0.2;
         }
-        PhysVector3 rotateBy = colliders[0]->Rotation * PhysVector3{ 0.2, 0, 0.0 };
+        PhysVector3 rotateBy = colliders[0]->Rotation * PhysVector3{ 0.05, 0, 0.0 };
 
-        if (GetKeyState('W') & 0x8000)
+        if (key == KEY_W)
         {
-            colliders[1]->AngularVelocity = rotateBy;
-            colliders[2]->AngularVelocity = rotateBy;
-            colliders[3]->AngularVelocity = rotateBy;
-            colliders[4]->AngularVelocity = rotateBy;
+            colliders[0]->AngularVelocity = rotateBy;
         }
-        if (GetKeyState('S') & 0x8000)
+        if (key == KEY_S)
         {
 
-            colliders[1]->AngularVelocity = scale(rotateBy, -1);
-            colliders[2]->AngularVelocity = scale(rotateBy, -1);
-            colliders[3]->AngularVelocity = scale(rotateBy, -1);
-            colliders[4]->AngularVelocity = scale(rotateBy, -1);
+            colliders[0]->AngularVelocity = scale(rotateBy, -1);
         }
         if (key == KEY_E)
         {
-            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.1f, 0.0f);
+            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.0f, 0.5f);
         }
         if (key == KEY_Q)
         {
-            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, -0.1f, 0.0f);
+            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.0f, 0.5f);
         }
 
 

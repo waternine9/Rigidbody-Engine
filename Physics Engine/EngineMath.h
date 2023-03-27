@@ -151,6 +151,30 @@ public:
         result[3][3] = data[3][0] * mat2[0][3] + data[3][1] * mat2[1][3] + data[3][2] * mat2[2][3] + data[3][3] * mat2[3][3];
         return result;
     }
+    Matrix4x4 operator+(Matrix4x4 mat2)
+    {
+        Matrix4x4 result = *this;
+        result[0][0] += mat2[0][0];
+        result[0][1] += mat2[0][1];
+        result[0][2] += mat2[0][2];
+        result[0][3] += mat2[0][3];
+
+        result[1][0] += mat2[1][0];
+        result[1][1] += mat2[1][1];
+        result[1][2] += mat2[1][2];
+        result[1][3] += mat2[1][3];
+
+        result[2][0] += mat2[2][0];
+        result[2][1] += mat2[2][1];
+        result[2][2] += mat2[2][2];
+        result[2][3] += mat2[2][3];
+
+        result[3][0] += mat2[3][0];
+        result[3][1] += mat2[3][1];
+        result[3][2] += mat2[3][2];
+        result[3][3] += mat2[3][3];
+        return result;
+    }
     PhysVector4 operator*(const PhysVector4& vec)
     {
         PhysVector4 result;

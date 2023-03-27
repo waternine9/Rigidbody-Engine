@@ -12,6 +12,7 @@ class BaseModel
 public:
     std::vector<int> indices;
     std::vector<PhysVector3> vertices;
+    std::vector<Phys::SubModel> submodels;
     PhysVector3 position;
     void Load(std::string filename, PhysVector3 initPos)
     {
@@ -19,6 +20,9 @@ public:
 
         position = { 0.0, 0.0, 0.0 };
         int counter = 0;
+        bool encountered = false;
+        Phys::SubModel currentSubmodel;
+        currentSubmodel.position = { 0.0, 0.0, 0.0 };
         while (!f.eof())
         {
             char line[128];
@@ -29,6 +33,28 @@ public:
 
             char junk;
 
+            if (line[0] == 'o')
+            {
+
+                if (encountered)
+                {
+                    submodels.push_back(currentSubmodel);
+                    std::string name;
+                    currentSubmodel = Phys::SubModel();
+                    s >> junk >> name;
+                    currentSubmodel.name = name;
+
+                    
+                }
+                else
+                {
+                    std::string name;
+                    s >> junk >> name;
+                    currentSubmodel.name = name;
+
+                    encountered = true;
+                }
+            }
             if (line[0] == 'v' && line[1] == ' ')
             {
                 PhysVector3 v;
@@ -48,9 +74,25 @@ public:
                 indices.push_back(f0);
                 indices.push_back(f1);
                 indices.push_back(f2);
+                currentSubmodel.indices.push_back(f0);
+                currentSubmodel.indices.push_back(f1);
+                currentSubmodel.indices.push_back(f2);
+                currentSubmodel.ownVerts.push_back(vertices[f0] - initPos);
+                currentSubmodel.ownVerts.push_back(vertices[f1] - initPos);
+                currentSubmodel.ownVerts.push_back(vertices[f2] - initPos);
+                currentSubmodel.position = currentSubmodel.position + (vertices[f0] - initPos) + (vertices[f1] - initPos) + (vertices[f2] - initPos);
             }
         }
+        submodels.push_back(currentSubmodel);
         position = scale(position, 1.0 / counter);
+        for (Phys::SubModel &model : submodels)
+        {
+            model.position = scale(model.position, 1.0 / model.ownVerts.size());
+            for (PhysVector3 &v : model.ownVerts)
+            {
+                v = v - model.position;
+            }
+        }
     }
     void Render(std::vector<PhysVector3>& v)
     {
@@ -95,8 +137,8 @@ int main()
     models.push_back(model);
     model = new BaseModel();
     Phys::Collider* collider = new Phys::Collider();
-    collider->Velocity.z = 0.9;
-    collider->Init(models[0]->vertices, models[0]->indices);
+    collider->Velocity.z = 0.0;
+    collider->Init(models[0]->vertices, models[0]->indices, &models[0]->submodels);
     collider->AssignId(0);
     colliders.push_back(collider);
 
@@ -105,7 +147,7 @@ int main()
     models.push_back(model);
     collider = new Phys::Collider();
     collider->Static = true;
-    collider->Init(model->vertices, model->indices);
+    collider->Init(model->vertices, model->indices, &model->submodels);
     collider->GenerateOctree();
     colliders.push_back(collider);
 
@@ -114,7 +156,7 @@ int main()
     models.push_back(model);
     collider = new Phys::Collider();
     collider->Static = true;
-    collider->Init(model->vertices, model->indices);
+    collider->Init(model->vertices, model->indices, &model->submodels);
     collider->GenerateOctree();
     colliders.push_back(collider);
 
@@ -122,13 +164,51 @@ int main()
 
     while (!WindowShouldClose())
     {
+
+        const int SUBSTEPS = 16;
+        int newKey = GetKeyPressed();
+        key = newKey;
+        if (key == KEY_N)
+        {
+            BaseModel* model = new BaseModel();
+            model->Load("projectile.obj", colliders[0]->Position + scale(colliders[0]->Forward, 16) + PhysVector3(0, -0.0, 0));
+            models.push_back(model);
+            Phys::Collider* collider = new Phys::Collider();
+            collider->Velocity = scale(colliders[0]->Forward, 4);
+            collider->Init(model->vertices, model->indices, &model->submodels);
+            collider->AssignId(colliders.size());
+            collider->Update(SUBSTEPS);
+            colliders.push_back(collider);
+            key = 0;
+        }
+
+        if (key == KEY_A)
+        {
+            colliders[0]->AngularVelocity.y = 0.2; // colliders[1]->AngularVelocity + scale(colliders[0]->Forward, 2);
+        }
+
+        if (key == KEY_D)
+        {
+            colliders[0]->AngularVelocity.y = -0.2;
+        }
+        PhysVector3 rotateBy = colliders[0]->Rotation * PhysVector3{ 0.05, 0, 0.0 };
+
+        if (key == KEY_E)
+        {
+            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.0f, 0.5f);
+        }
+        if (key == KEY_Q)
+        {
+            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.0f, -0.5f);
+        }
+
+        
         const size_t size = colliders.size();
 
 
         double mouseX = GetMouseX() / 100.0 - 5.0;
         double mouseY = (GetMouseY() / 30.0 - 5.0) - 2.0;
 
-        const int SUBSTEPS = 16;
         float start = clock();
         for (int n = 0; n < SUBSTEPS; n++)
         {
@@ -150,17 +230,16 @@ int main()
             for (int i = 0; i < size; i++)
             {
                 Phys::Collider* collider = colliders[i];
-
+                colliders[0]->RotateSubmodels("Wheel", { 0.01, 0.0, 0.0 });
+            
+                collider->Velocity.y += 0.001;
                 collider->Update(SUBSTEPS);
                 if (collider->Static) continue;
                 PhysVector3 diff = colliders[5]->Position - collider->Position;
-                collider->Velocity.y += 0.0004; // scale(collider->Velocity + scale(normalize(diff), 0.01 / magnitude(diff)), 0.999);
+                 // scale(collider->Velocity + scale(normalize(diff), 0.01 / magnitude(diff)), 0.999);
             }
-            for (int i = 0; i < size; i++)
-            {
-                Phys::Collider* collider = colliders[i];
-                collider->FixWelds(SUBSTEPS);
-            }
+            
+
         }
 
         PhysVector3 v = colliders[0]->Position;
@@ -168,57 +247,17 @@ int main()
         v = colliders[0]->Position;
         camera.target = { (float)v.x, (float)v.y, (float)v.z };
 
-        int newKey = GetKeyPressed();
-        key = newKey;
-        if (key == KEY_N)
-        {
-            BaseModel* model = new BaseModel();
-            model->Load("projectile.obj", colliders[0]->Position + scale(colliders[0]->Forward, 16) + PhysVector3(0, -0.0, 0));
-            models.push_back(model);
-            Phys::Collider* collider = new Phys::Collider();
-            collider->Velocity = scale(colliders[0]->Forward, 4);
-            collider->Init(model->vertices, model->indices);
-            collider->AssignId(colliders.size());
-            collider->Update(SUBSTEPS);
-            colliders.push_back(collider);
-            key = 0;
-        }
-
-        if (key == KEY_A)
-        {
-            colliders[0]->AngularVelocity.y = 0.2; // colliders[1]->AngularVelocity + scale(colliders[0]->Forward, 2);
-        }
-
-        if (key == KEY_D)
-        {
-            colliders[0]->AngularVelocity.y = -0.2;
-        }
-        PhysVector3 rotateBy = colliders[0]->Rotation * PhysVector3{ 0.05, 0, 0.0 };
-
-        if (key == KEY_W)
-        {
-            colliders[0]->AngularVelocity = rotateBy;
-        }
-        if (key == KEY_S)
-        {
-
-            colliders[0]->AngularVelocity = scale(rotateBy, -1);
-        }
-        if (key == KEY_E)
-        {
-            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.0f, 0.5f);
-        }
-        if (key == KEY_Q)
-        {
-            colliders[0]->Velocity = colliders[0]->Velocity + PhysVector3(0.0f, 0.0f, -0.5f);
-        }
-
+        PhysVector3 forward = colliders[0]->Rotation * PhysVector3(0, 0, 4);
 
         ClearBackground(BLACK);
 
 
         BeginDrawing();
         BeginMode3D(camera);
+
+        PhysVector3 v2 = v + forward;
+
+        DrawLine3D({ (float)v.x, (float)v.y, (float)v.z }, { (float)v2.x, (float)v2.y, (float)v2.z }, GREEN);
 
         int t = -1;
         for (BaseModel* model : models)

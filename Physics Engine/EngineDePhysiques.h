@@ -1,6 +1,7 @@
 #pragma once
 #include "EngineMath.h"
 #include <vector>
+#include "Utilities.hpp"
 
 namespace Phys
 {
@@ -382,12 +383,12 @@ namespace Phys
         std::string name;
         std::vector<int> indices;
         std::vector<PhysVector3> ownVerts;
+        PhysVector3 position;
     };
 	class Collider
 	{
 	protected:
         std::vector<PhysVector3> _NextVertices;
-        std::vector<Weld> _Welds = std::vector<Weld>();
         std::vector<SubModel> *_SubModels;
         int _Id = 0;
 
@@ -407,9 +408,6 @@ namespace Phys
                 
                 n++;
                 
-                if (collider == Parent.other) continue;
-                if (collider->Parent.other == this) continue;
-
 
 
                 if (n == _Id) continue;
@@ -459,11 +457,10 @@ namespace Phys
         }
         
 	public:
-        Weld Parent;
         AABB Bounds;
         PhysVector3 AngularVelocity{ 0.0, 0.0, 0.0 };
         PhysQuaternion Rotation{ 0.0, 0.0, 0.0, 1.0 };
-        PhysVector3 Velocity{ 0.0, 0.0, 0.0 }, Position{ 0.0, 0.0, 0.0 };
+        PhysVector3 Velocity{ 0.0, 0.0, 0.0 }, Position{ 0.0, 0.0, 0.0 }, IterPosition{ 0.0, 0.0, 0.0 };
 		std::vector<TriangleProp> Triangles;
         std::vector<PhysVector3> RenderVertices;
         std::vector<PhysVector3> _OldVertices;
@@ -480,11 +477,11 @@ namespace Phys
 
         double Mass = 1;
 
-        void Init(std::vector<PhysVector3>& vertices, std::vector<int>& indices)
+        void Init(std::vector<PhysVector3>& vertices, std::vector<int>& indices, std::vector<Phys::SubModel>* submodels)
         {
             _Vertices = std::vector<PhysVector3*>();
             _NextVertices = std::vector<PhysVector3>();
-            _Welds = std::vector<Weld>();
+            _SubModels = submodels;
             for (PhysVector3& v : vertices)
             {
                 _Vertices.push_back(&v);
@@ -506,11 +503,6 @@ namespace Phys
             GenerateOctree();
             Mass = (Bounds.max.x - Bounds.min.x) * (Bounds.max.y - Bounds.min.y) * (Bounds.max.z - Bounds.min.z) / 2.0;
             std::cout << Mass << std::endl;
-        }
-        void WeldTo(Collider* other)
-        {
-            Parent.other = other;
-            Parent.toOther = other->Position - Position;
         }
         void GenerateOctree()
         {
@@ -541,14 +533,7 @@ namespace Phys
 		{
 			const double InvSub = 1.0 / sub;
             
-			Position = { 0.0, 0.0, 0.0 };
-			for (PhysVector3* _Vert : _Vertices)
-			{
-				Position = Position + *_Vert;
-			}
-			Position = scale(Position, 1.0 / _Vertices.size());
-			
-            Rotation =  ( Rotation + Rotation * (PhysQuaternion{ AngularVelocity.z * 0.5, -AngularVelocity.y * 0.5, AngularVelocity.x * 0.5, 0.0 } * InvSub)).normalize();
+            Rotation =  ( Rotation + Rotation * (PhysQuaternion{ -AngularVelocity.x * 0.5, -AngularVelocity.y * 0.5, -AngularVelocity.z * 0.5, 0.0 } * InvSub)).normalize();
 
             Matrix4x4 RotMat = rotate(scale(AngularVelocity, InvSub));
 
@@ -568,43 +553,50 @@ namespace Phys
 
             PhysVector3 toOther;
 
-
-
+            
+            Position = { 0.0, 0.0, 0.0 };
+            for (PhysVector3* _Vert : _Vertices)
+            {
+                Position = Position + *_Vert;
+            }
+            Position = scale(Position, 1.0 / _Vertices.size());
 
             // AERODYNAMICS
             
             
             // NOTE: Children aren't affected by aerodynamics.
-            if (!Parent.other)
+            for (TriangleProp& prop : Triangles)
             {
-                for (TriangleProp& prop : Triangles)
-                {
-                    PhysVector3 p0 = *prop.p0;
-                    PhysVector3 p1 = *prop.p1;
-                    PhysVector3 p2 = *prop.p2;
-                    PhysVector3 np0 = Position + RotMat * (p0 - Position) + scale(Velocity, InvSub);
-                    PhysVector3 np1 = Position + RotMat * (p1 - Position) + scale(Velocity, InvSub);
-                    PhysVector3 np2 = Position + RotMat * (p2 - Position) + scale(Velocity, InvSub);
-                    double surfaceArea = magnitude(cross(np2 - np0, np1 - np0)) / 2.0;
-                    PhysVector3 normal = normalize(cross(np2 - np0, np1 - np0));
+                PhysVector3 p0 = *prop.p0;
+                PhysVector3 p1 = *prop.p1;
+                PhysVector3 p2 = *prop.p2;
+                PhysVector3 np0 = Position + RotMat * (p0 - Position) + scale(Velocity, InvSub);
+                PhysVector3 np1 = Position + RotMat * (p1 - Position) + scale(Velocity, InvSub);
+                PhysVector3 np2 = Position + RotMat * (p2 - Position) + scale(Velocity, InvSub);
+                double surfaceArea = magnitude(cross(np2 - np0, np1 - np0)) / 2.0;
+                PhysVector3 normal = normalize(cross(np2 - np0, np1 - np0));
 
-                    double drag = 0.0;
-                    double tmpDrag = (-dot(normal, np0 - p0) > 0 ? 1 : 0) * magnitude(np0 - p0);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np0))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
-                    drag += tmpDrag / 3.0;
-                    tmpDrag = (-dot(normal, np1 - p1) > 0 ? 1 : 0) * magnitude(np1 - p1);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np1))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
-                    drag += tmpDrag / 3.0;
-                    tmpDrag = (-dot(normal, np2 - p2) > 0 ? 1 : 0) * magnitude(np2 - p2);
-                    AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np2))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
-                    drag += tmpDrag / 3.0;
+                double drag = 0.0;
+                double tmpDrag = (-dot(normal, np0 - p0) > 0 ? 1 : 0) * magnitude(np0 - p0);
+                AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np0))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
+                drag += tmpDrag / 3.0;
+                tmpDrag = (-dot(normal, np1 - p1) > 0 ? 1 : 0) * magnitude(np1 - p1);
+                AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np1))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
+                drag += tmpDrag / 3.0;
+                tmpDrag = (-dot(normal, np2 - p2) > 0 ? 1 : 0) * magnitude(np2 - p2);
+                AngularVelocity = AngularVelocity - scale(normalize(cross(normal, (Position - np2))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
+                drag += tmpDrag / 3.0;
 
-                    drag *= surfaceArea;
+                drag *= surfaceArea;
 
-                    drag /= 200;
-                    Velocity = Velocity + scale(normal, drag);
-                }
+                drag /= 200;
+                Velocity = Velocity + scale(normal, drag);
             }
+
+            IterPosition = IterPosition + scale(Velocity, InvSub);
+            UpdateSubmodels(sub);
+
+            
             // AERODYNAMICS
 
             int _i = -1;
@@ -612,53 +604,36 @@ namespace Phys
 			{
                 _i++;
 				PhysVector3 Previous = _OldVertices[_i];
-				PhysVector3 Next = Position + RotMat * (*_Vert - Position) + scale(Velocity, InvSub);
+				PhysVector3 Next = *_Vert;
 				
 				CollisionInfo Result;
 
 				if (_CollideWithOthers(otherColliders, Next, Result))
 				{
                     collisions++;
-                    if (Parent.other) Parent.other->collisions++;
-
-                    PhysVector3 _PosUpdate = scale(Result.Normal, powf(Result.Mass / (Mass + (Parent.other ? Parent.other->Mass : 0) + Result.Mass), 1));
-					PhysVector3 _VelocityUpdate = scale(scale(Result.Normal, 0.025) + scale(Result.Velocity, 0.01) - scale(Next - Previous, 0.25), powf(Result.Mass / (Mass + (Parent.other ? Parent.other->Mass : 0) + Result.Mass), 1));
+                    PhysVector3 _PosUpdate = scale(Result.Normal, powf(Result.Mass / (Mass + Result.Mass), 1));
+					PhysVector3 _VelocityUpdate = scale(scale(Result.Normal, 0.025) + scale(Result.Velocity, 0.01) + scale(Next - Previous, 0.25), powf(Result.Mass / (Mass + Result.Mass), 1));
                     
-                    if (!Parent.other) PosUpdate = PosUpdate + _PosUpdate;
-                    else Parent.other->PosUpdate = Parent.other->PosUpdate + _PosUpdate;
+                    PosUpdate = PosUpdate + _PosUpdate;
 
-                    if (!Parent.other) VelocityUpdate = VelocityUpdate + _VelocityUpdate;
-                    else Parent.other->VelocityUpdate = Parent.other->VelocityUpdate + _VelocityUpdate;
+                    VelocityUpdate = VelocityUpdate + _VelocityUpdate;
 
-                    AngularUpdate = AngularUpdate - scale(normalize(cross(Result.Normal, (Position - Next) + (Next - Previous))), (Parent.other ? 0.5 : 1.0) * magnitude(Next - Previous) * powf(Result.Mass / (Mass + (Parent.other ? Parent.other->Mass : 0) + Result.Mass), 1));
-                    if (Parent.other) Parent.other->AngularUpdate = Parent.other->AngularUpdate - scale(normalize(cross(Result.Normal, (Parent.other->Position - Next) + (Next - Previous))), magnitude(Next - Previous) * powf(Result.Mass / (Mass + Parent.other->Mass + Result.Mass), 1));
+                    AngularUpdate = AngularUpdate - scale(normalize(cross(Result.Normal, (Position - Next) + (Next - Previous))), magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
+                    
 				}
-                *_Vert = Next;
 			}
 
             
         }
         void Update(int sub)
         {
+            double InvSub = 1.0 / sub;
             if (collisions > 0)
             {
-                Velocity = scale(Velocity + scale(VelocityUpdate, 1.0 / collisions), 1.0 - (0.001));
-                AngularVelocity = AngularVelocity + scale(AngularUpdate, 1.0 / collisions);
-
-                if (!Parent.other)
-                {
-                    for (PhysVector3* _Vert : _Vertices)
-                    {
-                        *_Vert = *_Vert + scale(PosUpdate, 1.0 / collisions);
-                    }
-                }
-                else
-                {
-                    for (PhysVector3* _Vert : Parent.other->_Vertices)
-                    {
-                        *_Vert = *_Vert + scale(PosUpdate, 1.0 / collisions);
-                    }
-                }
+                Velocity = scale(Velocity - scale(VelocityUpdate, 1.0 / collisions), 1.0 - (0.001));
+                AngularVelocity = scale(AngularVelocity + scale(AngularUpdate, 1.0 / collisions), 0.9);
+                std::cout << "Why is it not working" << std::endl;
+                IterPosition = IterPosition + scale(PosUpdate, 1.0 / collisions);
             }
             RenderVertices = std::vector<PhysVector3>();
             for (PhysVector3* v : _Vertices)
@@ -669,33 +644,16 @@ namespace Phys
             {
                 prop.normal = normalize(cross(*prop.p2 - *prop.p0, *prop.p1 - *prop.p0));
             }
-            double InvSub = 1.0 / sub;
-            
-            
         }
 		void AssignId(int id)
 		{
 			_Id = id;
 		}
-        void FixWelds(int sub)
-        {
-            double InvSub = 1.0 / sub;
-            if (Parent.other)
-            {
-                Matrix4x4 otherRotMat = rotate(scale(Parent.other->AngularVelocity, InvSub));
-                Parent.toOther = otherRotMat * Parent.toOther;
-                PhysVector3 toOther = Position - (Parent.other->Position - Parent.toOther);
-                for (PhysVector3* v : _Vertices)
-                {
-                    *v = (Position + otherRotMat * (*v - Position)) - toOther;
-                }
-            }
-        }
-        bool RotateSubmodel(std::string name, PhysVector3 axis)
+        void RotateSubmodels(std::string nameStartsWith, PhysVector3 axis)
         {
             for (SubModel &model : *_SubModels)
             {
-                if (model.name == name)
+                if (startsWith(model.name, nameStartsWith))
                 {
                     Matrix4x4 rotMat = rotate(axis);
 
@@ -706,14 +664,26 @@ namespace Phys
                     for (int i = 0;i < model.indices.size();i += 3)
                     {
                         
-                        *_Vertices[model.indices[i]] = Position + Rotation * model.ownVerts[i];
-                        *_Vertices[model.indices[i] + 1] = Position + Rotation * model.ownVerts[i + 1];
-                        *_Vertices[model.indices[i] + 2] = Position + Rotation * model.ownVerts[i + 2]; 
+                        model.ownVerts[i] = rotMat * model.ownVerts[i];
+                        model.ownVerts[i + 1] = rotMat * model.ownVerts[i + 1];
+                        model.ownVerts[i + 2] = rotMat * model.ownVerts[i + 2];
                     }
-                    return true;
                 }
             }
-            return false;
+        }
+        
+        void UpdateSubmodels(int sub)
+        {
+            double InvSub = 1.0 / sub;
+            for (SubModel &model : *_SubModels)
+            {
+                for (int i = 0;i < model.indices.size();i += 3)
+                {
+                    *_Vertices[model.indices[i]] = IterPosition + Rotation * (model.position + model.ownVerts[i]);
+                    *_Vertices[model.indices[i + 1]] = IterPosition + Rotation * (model.position + model.ownVerts[i + 1]);
+                    *_Vertices[model.indices[i + 2]] = IterPosition + Rotation * (model.position + model.ownVerts[i + 2]); 
+                }
+            }
         }
 	};
 }

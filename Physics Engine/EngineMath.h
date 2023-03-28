@@ -552,3 +552,10 @@ PhysQuaternion slerp(PhysQuaternion q1, PhysQuaternion q2, double t) {
 
     return result;
 }
+
+PhysQuaternion inverse(PhysQuaternion q)
+{
+    PhysQuaternion conjugate = { -q.x, -q.y, -q.z, q.w };
+    double normsq = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
+    return { conjugate.x / normsq, conjugate.y / normsq, conjugate.z / normsq, conjugate.w / normsq };
+}

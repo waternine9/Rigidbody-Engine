@@ -578,17 +578,17 @@ namespace Phys
 
                 double drag = 0.0;
                 double tmpDrag = (-dot(normal, np0 - p0) > 0 ? 1 : 0) * magnitude(np0 - p0);
-                AngularVelocity = AngularVelocity + scale(normalize(cross(normal, (Position - np0))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity + inverse(Rotation) * scale(normalize(cross(normal, (Position - np0))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
                 tmpDrag = (-dot(normal, np1 - p1) > 0 ? 1 : 0) * magnitude(np1 - p1);
-                AngularVelocity = AngularVelocity + scale(normalize(cross(normal, (Position - np1))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity + inverse(Rotation) * scale(normalize(cross(normal, (Position - np1))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
                 tmpDrag = (-dot(normal, np2 - p2) > 0 ? 1 : 0) * magnitude(np2 - p2);
-                AngularVelocity = AngularVelocity + scale(normalize(cross(normal, (Position - np2))), 0.004 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity + inverse(Rotation) * scale(normalize(cross(normal, (Position - np2))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
 
                 drag *= surfaceArea;
-
+                
                 drag /= 400;
                 Triangles[prop / 3].drag = drag;
                 Velocity = Velocity + scale(normal, drag);
@@ -623,7 +623,7 @@ namespace Phys
 
                     VelocityUpdate = VelocityUpdate + _VelocityUpdate;
 
-                    AngularUpdate = AngularUpdate + inverse(Rotation) * scale(normalize(cross((Position - Next), Result.Normal)), magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
+                    AngularUpdate = AngularUpdate + inverse(Rotation) * scale(normalize(cross((Position - Next), Result.Normal)), 4.0 * magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
                     
 				}
 			}

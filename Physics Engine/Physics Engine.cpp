@@ -3,7 +3,8 @@
 #include <iostream>
 #include "EngineDePhysiques.h"
 
-#include "raylib.h"
+#include "Renderer.hpp"
+
 #include <fstream>
 #include <strstream>
 #include <omp.h>
@@ -12,6 +13,7 @@ class BaseModel
 public:
     std::vector<int> indices;
     std::vector<PhysVector3> vertices;
+    std::vector<PhysVector2> uvs;
     std::vector<Phys::SubModel> submodels;
     PhysVector3 position;
     void Load(std::string filename, PhysVector3 initPos)
@@ -19,10 +21,12 @@ public:
         std::ifstream f(filename);
 
         position = { 0.0, 0.0, 0.0 };
-        int counter = 0;
+        int counter = 0, counter2 = 0;
         bool encountered = false;
         Phys::SubModel currentSubmodel;
         currentSubmodel.position = { 0.0, 0.0, 0.0 };
+        std::vector<PhysVector2> tempUvs;
+        std::vector<PhysVector3> tempVertices;
         while (!f.eof())
         {
             char line[128];
@@ -60,17 +64,28 @@ public:
                 PhysVector3 v;
                 s >> junk >> v.x >> v.y >> v.z;
                 vertices.push_back(v + initPos);
+                uvs.push_back({ 0, 0 });
                 position = position + v + initPos;
                 counter++;
             }
+            if (line[0] == 'v' && line[1] == 't')
+            {
+                PhysVector2 v;
+                s >> junk >> junk >> v.x >> v.y;
+                tempUvs.push_back(v);
+            }
             if (line[0] == 'f')
             {
-                int f0;
-                int f1;
-                int f2;
-                s >> junk >> f0 >> f1 >> f2;
+                int f0, uv0;
+                int f1, uv1;
+                int f2, uv2;
+                s >> junk >> f0 >> junk >> uv0 >> f1 >> junk >> uv1 >> f2 >> junk >> uv2;
 
                 f0--; f1--; f2--;
+                uv0--; uv1--; uv2--;
+                uvs[f0] = tempUvs[uv0];
+                uvs[f1] = tempUvs[uv1];
+                uvs[f2] = tempUvs[uv2];
                 indices.push_back(f0);
                 indices.push_back(f1);
                 indices.push_back(f2);
@@ -93,21 +108,10 @@ public:
                 v = v - model.position;
             }
         }
-    }
-    void Render(std::vector<PhysVector3>& v, Phys::Collider* collider)
-    {
-        for (int i = 0; i < indices.size(); i += 3)
+        for (PhysVector2 &uv : uvs)
         {
-
-            PhysVector3 p0 = vertices[indices[i]];
-            PhysVector3 p1 = vertices[indices[i + 1]];
-            PhysVector3 p2 = vertices[indices[i + 2]];
-            PhysVector3 normal = normalize(cross(p2 - p0, p1 - p0));
-            Vector3 rp0 = { p0.x, p0.y, p0.z };
-            Vector3 rp1 = { p1.x, p1.y, p1.z };
-            Vector3 rp2 = { p2.x, p2.y, p2.z };
-            unsigned char lums = normal.y * 127.0 + 128.0;
-            DrawTriangle3D(rp0, rp1, rp2, Color{ lums, lums, lums, 255 });
+            
+            // std::cout << uv.x << " " << uv.y << std::endl;
         }
     }
 };
@@ -116,16 +120,6 @@ int main()
 {
     omp_set_num_threads(8);
 
-    InitWindow(2560, 1440, "Softbodies!");
-
-    SetTargetFPS(60);
-
-    Camera3D camera = { 0 };
-    camera.position = { 0.0f, 0.0f, -4.0f };  // Camera position
-    camera.target = { 0.0f, 0.0f, 4.0f };      // Camera looking at point
-    camera.up = { 0.0f, -1.0f, 0.0f };          // Camera up vector (rotation towards target)
-    camera.fovy = 90.0f;                                // Camera field-of-view Y
-    camera.projection = CAMERA_PERSPECTIVE;
 
     double tick = 0;
 
@@ -133,11 +127,11 @@ int main()
     std::vector<Phys::Collider*> colliders;
 
     BaseModel* model = new BaseModel();
-    model->Load("testing.obj", { 0.0, -40, 0.0 });
+    model->Load("Bruh.obj", { 0.0, -40, 0.0 });
     models.push_back(model);
     model = new BaseModel();
     Phys::Collider* collider = new Phys::Collider();
-    collider->Velocity.z = 0.0;
+    collider->Velocity.z = 0.5;
     collider->Init(models[0]->vertices, models[0]->indices, &models[0]->submodels);
     collider->AssignId(0);
     colliders.push_back(collider);
@@ -151,27 +145,48 @@ int main()
     collider->GenerateOctree();
     colliders.push_back(collider);
 
-    int key = 0;
-
-    bool rotating = false;
-
-    while (!WindowShouldClose())
+    double rotating = 0;
+    
+    Renderer renderer;
+    
+    std::cout << "start" << std::endl;
+    renderer.CreateWindow("Rigidbodies!", 2560, 1440);
+    std::cout << "end" << std::endl;
+    renderer.Init();
+    std::cout << "Checkpoint0 " << std::endl;
+    renderer.AddModel(&models[0]->vertices, models[0]->uvs, models[0]->indices, "texture.jpg");
+    renderer.AddModel(&models[1]->vertices, models[1]->uvs, models[1]->indices, "texture.jpg");
+    renderer.camera.fov = 90.0f;
+    
+    while (renderer.LoopUntilClosed())
     {
 
         const int SUBSTEPS = 64;
-        int newKey = GetKeyPressed();
-        key = newKey;
-
-        if (key == KEY_E)
+        if (renderer.IsKeyPressed(GLFW_KEY_E))
         {
-            rotating = !rotating;
+            rotating += 0.00005;
         }
-        
+        if (renderer.IsKeyPressed(GLFW_KEY_Q))
+        {
+            rotating -= 0.00005;
+        }
+        if (renderer.IsKeyPressed(GLFW_KEY_A))
+        {
+            colliders[0]->AngularVelocity = colliders[0]->AngularVelocity + inverse(colliders[0]->Rotation) * PhysVector3(0, 0, 0.001);
+        }
+        if (renderer.IsKeyPressed(GLFW_KEY_D))
+        {
+            colliders[0]->AngularVelocity = colliders[0]->AngularVelocity - inverse(colliders[0]->Rotation) * PhysVector3(0, 0, 0.001);
+        }
+        if (renderer.IsKeyPressed(GLFW_KEY_W))
+        {
+            colliders[0]->AngularVelocity = colliders[0]->AngularVelocity + inverse(colliders[0]->Rotation) * PhysVector3(0.001, 0, 0.0);
+        }
+        if (renderer.IsKeyPressed(GLFW_KEY_S))
+        {
+            colliders[0]->AngularVelocity = colliders[0]->AngularVelocity - inverse(colliders[0]->Rotation) * PhysVector3(0.001, 0, 0.0);
+        }
         const size_t size = colliders.size();
-
-
-        double mouseX = GetMouseX() / 100.0 - 5.0;
-        double mouseY = (GetMouseY() / 30.0 - 5.0) - 2.0;
 
         float start = clock();
         for (int n = 0; n < SUBSTEPS; n++)
@@ -194,8 +209,18 @@ int main()
             for (int i = 0; i < size; i++)
             {
                 Phys::Collider* collider = colliders[i];
-                if (rotating) colliders[0]->RotateSubmodels("Propeller", { 0.0, 0.0, -0.2 });
-            
+                colliders[0]->RotateSubmodels("Propeller", { 0.0, rotating, 0.0 });
+
+                if (renderer.IsKeyPressed(GLFW_KEY_W))
+                {
+                    colliders[0]->RotateSubmodels("Wheel", { 0.01, 0.0, 0.0 });
+                }
+                if (renderer.IsKeyPressed(GLFW_KEY_S))
+                {
+                    colliders[0]->RotateSubmodels("Wheel", { -0.01, 0.0, 0.0 });
+                }
+                
+
                 collider->Velocity.y += 0.0001;
                 collider->Update(SUBSTEPS);
                 if (collider->Static) continue;
@@ -205,35 +230,17 @@ int main()
             
 
         }
-
-        PhysVector3 v = colliders[0]->Position;
-        camera.position = { (float)v.x + 10.0f, (float)v.y, (float)v.z };
+        PhysVector3 forward = colliders[0]->Rotation * PhysVector3(0.0, 4, 10.0);
+        PhysVector3 v = colliders[0]->Position - forward;
+        renderer.camera.position.x = v.x;
+        renderer.camera.position.y = v.y;
+        renderer.camera.position.z = v.z;
         v = colliders[0]->Position;
-        camera.target = { (float)v.x, (float)v.y, (float)v.z };
-
+        renderer.camera.target.x = v.x;
+        renderer.camera.target.y = v.y;
+        renderer.camera.target.z = v.z;
+        renderer.Update();
+        renderer.Render();
         
-        ClearBackground(BLACK);
-
-        PhysVector3 forward = colliders[0]->Rotation * PhysVector3(0, 0, 1);
-
-
-        BeginDrawing();
-        BeginMode3D(camera);
-
-        PhysVector3 v2 = v + scale(forward, 10);
-
-        DrawLine3D({ (float)v.x, (float)v.y, (float)v.z }, { (float)v2.x, (float)v2.y, (float)v2.z }, GREEN);
-
-        int t = -1;
-        for (BaseModel* model : models)
-        {
-            t++;
-            model->Render(colliders[t]->RenderVertices, colliders[t]);
-        }
-
-        EndMode3D();
-        EndDrawing();
-
-        DrawFPS(10, 10);
     }
 }

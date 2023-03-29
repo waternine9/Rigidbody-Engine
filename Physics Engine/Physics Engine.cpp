@@ -13,6 +13,7 @@ class BaseModel
 public:
     std::vector<int> indices;
     std::vector<PhysVector3> vertices;
+    std::vector<PhysVector3> normals;
     std::vector<PhysVector2> uvs;
     std::vector<Phys::SubModel> submodels;
     PhysVector3 position;
@@ -26,7 +27,7 @@ public:
         Phys::SubModel currentSubmodel;
         currentSubmodel.position = { 0.0, 0.0, 0.0 };
         std::vector<PhysVector2> tempUvs;
-        std::vector<PhysVector3> tempVertices;
+        std::vector<PhysVector3> tempNormals;
         while (!f.eof())
         {
             char line[128];
@@ -65,6 +66,7 @@ public:
                 s >> junk >> v.x >> v.y >> v.z;
                 vertices.push_back(v + initPos);
                 uvs.push_back({ 0, 0 });
+                normals.push_back({ 0, 0, 0});
                 position = position + v + initPos;
                 counter++;
             }
@@ -74,18 +76,28 @@ public:
                 s >> junk >> junk >> v.x >> v.y;
                 tempUvs.push_back(v);
             }
+            if (line[0] == 'v' && line[1] == 'n')
+            {
+                PhysVector3 v;
+                s >> junk >> junk >> v.x >> v.y >> v.z;
+                tempNormals.push_back(v);
+            }
             if (line[0] == 'f')
             {
-                int f0, uv0;
-                int f1, uv1;
-                int f2, uv2;
-                s >> junk >> f0 >> junk >> uv0 >> f1 >> junk >> uv1 >> f2 >> junk >> uv2;
+                int f0, uv0, n0;
+                int f1, uv1, n1;
+                int f2, uv2, n2;
+                s >> junk >> f0 >> junk >> uv0 >> junk >> n0 >> f1 >> junk >> uv1 >> junk >> n1 >> f2 >> junk >> uv2 >> junk >> n2;
 
                 f0--; f1--; f2--;
                 uv0--; uv1--; uv2--;
+                n0--; n1--; n2--;
                 uvs[f0] = tempUvs[uv0];
                 uvs[f1] = tempUvs[uv1];
                 uvs[f2] = tempUvs[uv2];
+                normals[f0] = tempNormals[n0];
+                normals[f1] = tempNormals[n1];
+                normals[f2] = tempNormals[n2];
                 indices.push_back(f0);
                 indices.push_back(f1);
                 indices.push_back(f2);
@@ -127,11 +139,10 @@ int main()
     std::vector<Phys::Collider*> colliders;
 
     BaseModel* model = new BaseModel();
-    model->Load("Bruh.obj", { 0.0, -40, 0.0 });
+    model->Load("Bruh.obj", { 0.0, 0, 0.0 });
     models.push_back(model);
     model = new BaseModel();
     Phys::Collider* collider = new Phys::Collider();
-    collider->Velocity.z = 0.5;
     collider->Init(models[0]->vertices, models[0]->indices, &models[0]->submodels);
     collider->AssignId(0);
     colliders.push_back(collider);
@@ -142,7 +153,6 @@ int main()
     collider = new Phys::Collider();
     collider->Static = true;
     collider->Init(model->vertices, model->indices, &model->submodels);
-    collider->GenerateOctree();
     colliders.push_back(collider);
 
     double rotating = 0;
@@ -154,8 +164,8 @@ int main()
     std::cout << "end" << std::endl;
     renderer.Init();
     std::cout << "Checkpoint0 " << std::endl;
-    renderer.AddModel(&models[0]->vertices, models[0]->uvs, models[0]->indices, "texture.jpg");
-    renderer.AddModel(&models[1]->vertices, models[1]->uvs, models[1]->indices, "texture.jpg");
+    renderer.AddModel(&models[0]->vertices, models[0]->uvs, models[0]->normals, models[0]->indices, &colliders[0]->Rotation, "texture.jpg");
+    renderer.AddModel(&models[1]->vertices, models[1]->uvs, models[1]->normals, models[1]->indices, &colliders[1]->Rotation, "texture2.jpg");
     renderer.camera.fov = 90.0f;
     
     while (renderer.LoopUntilClosed())
@@ -177,14 +187,6 @@ int main()
         if (renderer.IsKeyPressed(GLFW_KEY_D))
         {
             colliders[0]->AngularVelocity = colliders[0]->AngularVelocity - inverse(colliders[0]->Rotation) * PhysVector3(0, 0, 0.001);
-        }
-        if (renderer.IsKeyPressed(GLFW_KEY_W))
-        {
-            colliders[0]->AngularVelocity = colliders[0]->AngularVelocity + inverse(colliders[0]->Rotation) * PhysVector3(0.001, 0, 0.0);
-        }
-        if (renderer.IsKeyPressed(GLFW_KEY_S))
-        {
-            colliders[0]->AngularVelocity = colliders[0]->AngularVelocity - inverse(colliders[0]->Rotation) * PhysVector3(0.001, 0, 0.0);
         }
         const size_t size = colliders.size();
 
@@ -230,7 +232,7 @@ int main()
             
 
         }
-        PhysVector3 forward = colliders[0]->Rotation * PhysVector3(0.0, 4, 10.0);
+        PhysVector3 forward = colliders[0]->Rotation * PhysVector3(0.0, 4, 10);
         PhysVector3 v = colliders[0]->Position - forward;
         renderer.camera.position.x = v.x;
         renderer.camera.position.y = v.y;

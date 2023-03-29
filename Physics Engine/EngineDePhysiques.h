@@ -589,7 +589,7 @@ namespace Phys
 
                 drag *= surfaceArea;
                 
-                drag /= 400;
+                drag /= 800;
                 Triangles[prop / 3].drag = drag;
                 Velocity = Velocity + scale(normal, drag);
             }
@@ -623,7 +623,7 @@ namespace Phys
 
                     VelocityUpdate = VelocityUpdate + _VelocityUpdate;
 
-                    AngularUpdate = AngularUpdate + inverse(Rotation) * scale(normalize(cross((Position - Next), Result.Normal)), 4.0 * magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
+                    AngularUpdate = AngularUpdate + inverse(Rotation) * scale(normalize(cross((Position - Next), Result.Normal)), 8.0 * magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
                     
 				}
 			}

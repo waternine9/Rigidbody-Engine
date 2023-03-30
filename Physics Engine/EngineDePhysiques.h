@@ -386,7 +386,7 @@ namespace Phys
         std::vector<int> indices;
         std::vector<PhysVector3> ownVerts;
         PhysVector3 position;
-        
+        PhysQuaternion rotation = { 0, 0, 0, 1 };
     };
 	class Collider
 	{
@@ -493,7 +493,12 @@ namespace Phys
             Mass = 0.0;
             for (int i = 0; i < indices.size(); i += 3)
             {
-                Triangles.push_back({ _Vertices[indices[i]], _Vertices[indices[i + 1]], _Vertices[indices[i + 2]] });
+                TriangleProp prop;
+                prop.p0 = _Vertices[indices[i]];
+                prop.p1 = _Vertices[indices[i + 1]];
+                prop.p2 = _Vertices[indices[i + 2]];
+                prop.normal = normalize(cross(*prop.p2 - *prop.p0, *prop.p1 - *prop.p0));
+                Triangles.push_back(prop);
                 TriangleIndices.push_back(indices[i]);
                 TriangleIndices.push_back(indices[i + 1]);
                 TriangleIndices.push_back(indices[i + 2]);
@@ -559,7 +564,7 @@ namespace Phys
             Rotation =  ( Rotation + Rotation * (PhysQuaternion{ -AngularVelocity.x * 0.5, -AngularVelocity.y * 0.5, -AngularVelocity.z * 0.5, 0.0 } * InvSub)).normalize();
 
             IterPosition = IterPosition + scale(Velocity, InvSub);
-            UpdateSubmodels(sub);
+            UpdateSubmodels();
 
             
             // AERODYNAMICS
@@ -578,18 +583,18 @@ namespace Phys
 
                 double drag = 0.0;
                 double tmpDrag = (-dot(normal, np0 - p0) > 0 ? 1 : 0) * magnitude(np0 - p0);
-                AngularVelocity = AngularVelocity + inverse(Rotation) * scale(normalize(cross(normal, (Position - np0))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np0))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
                 tmpDrag = (-dot(normal, np1 - p1) > 0 ? 1 : 0) * magnitude(np1 - p1);
-                AngularVelocity = AngularVelocity + inverse(Rotation) * scale(normalize(cross(normal, (Position - np1))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np1))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
                 tmpDrag = (-dot(normal, np2 - p2) > 0 ? 1 : 0) * magnitude(np2 - p2);
-                AngularVelocity = AngularVelocity + inverse(Rotation) * scale(normalize(cross(normal, (Position - np2))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np2))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
 
                 drag *= surfaceArea;
                 
-                drag /= 800;
+                drag /= 8000;
                 Triangles[prop / 3].drag = drag;
                 Velocity = Velocity + scale(normal, drag);
             }
@@ -616,14 +621,14 @@ namespace Phys
 				if (_CollideWithOthers(otherColliders, Next, Result))
 				{
                     collisions++;
-                    PhysVector3 _PosUpdate = scale(Result.Normal, powf(Result.Mass / (Mass + Result.Mass), 1));
-					PhysVector3 _VelocityUpdate = scale(scale(Result.Normal, 0.0025) + scale(Result.Velocity, 0.001) + scale(Next - Previous, 0.25), powf(Result.Mass / (Mass + Result.Mass), 1));
+                    PhysVector3 _PosUpdate = scale(Result.Normal, 0.1 + powf(Result.Mass / (Mass + Result.Mass), 1));
+					PhysVector3 _VelocityUpdate = scale(scale(Result.Normal, -0.025) + scale(Result.Velocity, 0.01) + scale(Next - Previous, 0.25), powf(Result.Mass / (Mass + Result.Mass), 1));
                     
                     PosUpdate = PosUpdate + _PosUpdate;
 
                     VelocityUpdate = VelocityUpdate + _VelocityUpdate;
 
-                    AngularUpdate = AngularUpdate + inverse(Rotation) * scale(normalize(cross((Position - Next), Result.Normal)), 8.0 * magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
+                    AngularUpdate = AngularUpdate + inverse(Rotation) * scale(normalize(cross((Position - Next), Result.Normal)), magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
                     
 				}
 			}
@@ -635,8 +640,8 @@ namespace Phys
             double InvSub = 1.0 / sub;
             if (collisions > 0)
             {
-                Velocity = scale(Velocity - scale(VelocityUpdate, 1.0 / collisions), 1.0 - (0.00001));
-                AngularVelocity = scale(AngularVelocity + scale(AngularUpdate, 1.0 / collisions), 1.0 - (0.01));
+                Velocity = scale(Velocity - scale(VelocityUpdate, 1.0 / collisions), 1.0 - (0.001));
+                AngularVelocity = scale(AngularVelocity + scale(AngularUpdate, 1.0 / collisions), 1.0 - (0.001));
                 IterPosition = IterPosition + scale(PosUpdate, 1.0 / collisions);
             }
             RenderVertices = std::vector<PhysVector3>();
@@ -655,10 +660,12 @@ namespace Phys
 		}
         void RotateSubmodels(std::string nameStartsWith, PhysVector3 axis)
         {
+
             for (SubModel &model : *_SubModels)
             {
                 if (startsWith(model.name, nameStartsWith))
                 {
+                    model.rotation = (model.rotation + model.rotation * PhysQuaternion{ -axis.x * 0.5, -axis.y * 0.5, -axis.z * 0.5, 0.0 }).normalize();
                     Matrix4x4 rotMat = rotate(axis);
 
                     for (PhysVector3 &v : model.ownVerts)
@@ -676,9 +683,8 @@ namespace Phys
             }
         }
         
-        void UpdateSubmodels(int sub)
+        void UpdateSubmodels()
         {
-            double InvSub = 1.0 / sub;
             for (SubModel &model : *_SubModels)
             {
                 for (int i = 0;i < model.indices.size();i += 3)

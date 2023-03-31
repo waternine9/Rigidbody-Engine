@@ -509,11 +509,11 @@ namespace Phys
                 Position = Position + *_Vert;
             }
             Position = scale(Position, 1.0 / _Vertices.size());
-            GenerateOctree();
+            GenerateBounds();
             Mass = (Bounds.max.x - Bounds.min.x) * (Bounds.max.y - Bounds.min.y) * (Bounds.max.z - Bounds.min.z) / 2.0;
             std::cout << Mass << std::endl;
         }
-        void GenerateOctree()
+        void GenerateBounds()
         {
             AABB bounds{ { 100000.0, 1000000.0, 1000000.0 }, { -100000.0, -1000000.0, -1000000.0 } };
             for (TriangleProp& prop : Triangles)
@@ -537,6 +537,10 @@ namespace Phys
             Position = scale(Position, 1.0 / _Vertices.size());
 
             
+            for (TriangleProp &prop : Triangles)
+            {
+                prop.normal = normalize(cross(*prop.p2 - *prop.p0, *prop.p1 - *prop.p0));
+            }
         }
 		void Step(int sub, std::vector<Collider*> &otherColliders)
 		{
@@ -583,13 +587,13 @@ namespace Phys
 
                 double drag = 0.0;
                 double tmpDrag = (-dot(normal, np0 - p0) > 0 ? 1 : 0) * magnitude(np0 - p0);
-                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np0))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np0))), 0.001 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
                 tmpDrag = (-dot(normal, np1 - p1) > 0 ? 1 : 0) * magnitude(np1 - p1);
-                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np1))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np1))), 0.001 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
                 tmpDrag = (-dot(normal, np2 - p2) > 0 ? 1 : 0) * magnitude(np2 - p2);
-                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np2))), 0.01 / Mass * tmpDrag * surfaceArea * InvSub);
+                AngularVelocity = AngularVelocity - inverse(Rotation) * scale(normalize(cross(normal, (Position - np2))), 0.001 / Mass * tmpDrag * surfaceArea * InvSub);
                 drag += tmpDrag / 3.0;
 
                 drag *= surfaceArea;
@@ -621,14 +625,14 @@ namespace Phys
 				if (_CollideWithOthers(otherColliders, Next, Result))
 				{
                     collisions++;
-                    PhysVector3 _PosUpdate = scale(Result.Normal, 0.1 + powf(Result.Mass / (Mass + Result.Mass), 1));
-					PhysVector3 _VelocityUpdate = scale(scale(Result.Normal, -0.025) + scale(Result.Velocity, 0.01) + scale(Next - Previous, 0.25), powf(Result.Mass / (Mass + Result.Mass), 1));
+                    PhysVector3 _PosUpdate = scale(Result.Normal, 2.0 * powf(Result.Mass / (Mass + Result.Mass), 1));
+					PhysVector3 _VelocityUpdate = scale(scale(Result.Normal, -0.025) + scale(Result.Velocity, 0.01) + scale(Next - Previous, 0.0025), powf(Result.Mass / (Mass + Result.Mass), 1));
                     
                     PosUpdate = PosUpdate + _PosUpdate;
 
                     VelocityUpdate = VelocityUpdate + _VelocityUpdate;
 
-                    AngularUpdate = AngularUpdate + inverse(Rotation) * scale(normalize(cross((Position - Next), Result.Normal)), magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
+                    AngularUpdate = AngularUpdate + inverse(Rotation) * scale(cross((Position - Next), Result.Normal), magnitude(Next - Previous) * powf(Result.Mass / (Mass + Result.Mass), 1));
                     
 				}
 			}
@@ -640,18 +644,14 @@ namespace Phys
             double InvSub = 1.0 / sub;
             if (collisions > 0)
             {
-                Velocity = scale(Velocity - scale(VelocityUpdate, 1.0 / collisions), 1.0 - (0.001));
-                AngularVelocity = scale(AngularVelocity + scale(AngularUpdate, 1.0 / collisions), 1.0 - (0.001));
+                Velocity = scale(Velocity - scale(VelocityUpdate, 1.0 / collisions), 1.0 - (0.01 * InvSub));
+                AngularVelocity = scale(AngularVelocity + scale(AngularUpdate, 1.0 / collisions), 1.0 - (0.01 * InvSub));
                 IterPosition = IterPosition + scale(PosUpdate, 1.0 / collisions);
             }
             RenderVertices = std::vector<PhysVector3>();
             for (PhysVector3* v : _Vertices)
             {
                 RenderVertices.push_back(*v);
-            }
-            for (TriangleProp &prop : Triangles)
-            {
-                prop.normal = normalize(cross(*prop.p2 - *prop.p0, *prop.p1 - *prop.p0));
             }
         }
 		void AssignId(int id)

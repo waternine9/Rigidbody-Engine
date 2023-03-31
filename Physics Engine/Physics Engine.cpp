@@ -107,9 +107,10 @@ public:
             }
         }
         collider = new Phys::Collider();
+        collider->IterPosition = initPos;
         collider->AssignId(colliderIdx);
         collider->Static = isStatic;
-        collider->Update(1);
+        if (isStatic) collider->Update(1);
         colliderIdx++;
         collider->Init(colliderVertices, colliderIndices, &colliderSubmodels);
     }
@@ -271,20 +272,14 @@ int main()
 
     BaseModel* model = new BaseModel();
     model->Load("Bruh.obj", { 0.0, 0, 0.0 });
-    std::cout << "Bruh\n";
     model->LoadCollider("testing.obj", { 0.0, 0, 0.0 }, false);
     models.push_back(model);
-    std::cout << "Bruh\n";
     model = new BaseModel();
     model->Load("map.obj", { 0.0, 0.0, 0.0 });
     model->LoadCollider("map2.obj", { 0.0, 0.0, 0.0 }, true);
     models.push_back(model);
 
-    for (BaseModel *model : models)
-    {
-        colliders.push_back(model->collider);
-    }
-
+    
     double rotating = 0;
     
     Renderer renderer;
@@ -298,7 +293,10 @@ int main()
     renderer.AddModel(&models[1]->vertices, models[1]->uvs, models[1]->normals, models[1]->indices, &models[1]->collider->Rotation, "texture2.jpg");
     renderer.camera.fov = 90.0f;
     
-    
+    for (BaseModel *model : models)
+    {
+        colliders.push_back(model->collider);
+    }
 
     while (renderer.LoopUntilClosed())
     {
@@ -306,7 +304,7 @@ int main()
         
 
 
-        const int SUBSTEPS = 64;
+        const int SUBSTEPS = 16;
         if (renderer.IsKeyPressed(GLFW_KEY_Q))
         {
             rotating -= 0.005;
@@ -318,14 +316,23 @@ int main()
 
         if (renderer.IsKeyPressed(GLFW_KEY_S))
         {
-            models[0]->RotateSubmodels("Wing", { 0.001, 0.0, 0.0 });
+            models[0]->collider->AngularVelocity = models[0]->collider->AngularVelocity + inverse(models[0]->collider->Rotation) * PhysVector3(0.001, 0, 0);
         }
 
         if (renderer.IsKeyPressed(GLFW_KEY_W))
         {
-            models[0]->RotateSubmodels("Wing", { -0.001, 0.0, 0.0 });
+            models[0]->collider->AngularVelocity = models[0]->collider->AngularVelocity + inverse(models[0]->collider->Rotation) * PhysVector3(-0.001, 0, 0);
         }
 
+        if (renderer.IsKeyPressed(GLFW_KEY_A))
+        {
+            models[0]->collider->AngularVelocity.y += 0.001;
+        }
+
+        if (renderer.IsKeyPressed(GLFW_KEY_D))
+        {
+            models[0]->collider->AngularVelocity.y -= 0.001;
+        }
         const size_t size = models.size();
 
         float start = clock();
@@ -334,11 +341,8 @@ int main()
             for (int i = 0; i < size; i++)
             {
                 BaseModel* model = models[i];
-                if (!model->collider->Static)
-                {
-                    model->collider->GenerateOctree();
-
-                }
+                if (model->collider->Static) continue;
+                model->collider->GenerateBounds();
             }
             for (int i = 0; i < size; i++)
             {
@@ -347,7 +351,6 @@ int main()
                 model->collider->Step(SUBSTEPS, colliders);
             }
 
-            
             for (int i = 0; i < size; i++)
             {
                 BaseModel* model = models[i];
@@ -359,10 +362,11 @@ int main()
             }
             models[0]->RotateSubmodels("Propeller", { 0.0, rotating / SUBSTEPS, 0.0 });
 
+            models[0]->RotateSubmodels("Rotor", { rotating / SUBSTEPS, 0.0, 0.0 });
         }
-        models[0]->UpdateSubmodels();
+        for (BaseModel* model : models) model->UpdateSubmodels();
         //models[1]->UpdateSubmodels();
-        PhysVector3 forward = models[0]->collider->Rotation * PhysVector3(0.0, 4, 10);
+        PhysVector3 forward = models[0]->collider->Rotation * PhysVector3(-4.0, 4, 10);
         PhysVector3 v = models[0]->collider->Position - forward;
         renderer.camera.position.x = v.x;
         renderer.camera.position.y = v.y;
